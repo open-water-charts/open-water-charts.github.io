@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classificação Leonardo Macedo — Heatmap</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:#0c0f14;color:#e0e2e8;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem}
+h1{font-size:1.4rem;font-weight:600;margin-bottom:0.25rem;color:#fff}
+.subtitle{font-size:0.85rem;color:#8a8f9c;margin-bottom:1.5rem;text-align:center;max-width:600px;line-height:1.5}
+.charts{display:flex;flex-direction:column;gap:2.5rem;width:100%;max-width:750px}
+.chart-block{background:#151920;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.25rem 1.5rem 1.5rem}
+.chart-label{font-size:0.95rem;font-weight:500;margin-bottom:0.2rem}
+.chart-desc{font-size:0.78rem;color:#6b7080;margin-bottom:1rem;line-height:1.5}
+canvas{display:block;width:100%;cursor:crosshair}
+.legend{display:flex;gap:1.25rem;margin-top:0.75rem;font-size:0.75rem;color:#6b7080}
+.legend span{display:flex;align-items:center;gap:5px}
+.lbox{width:10px;height:10px;border-radius:2px}
+.tooltip{position:absolute;pointer-events:none;background:#1e2330;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:6px 12px;font-size:0.75rem;color:#e0e2e8;display:none;white-space:nowrap;z-index:10;backdrop-filter:blur(8px)}
+.footer{margin-top:2rem;font-size:0.7rem;color:#3a3f4c;text-align:center}
+.pts-table{margin-top:1.5rem;background:#151920;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.25rem 1.5rem;width:100%;max-width:750px}
+.pts-table h2{font-size:0.95rem;font-weight:500;margin-bottom:0.75rem}
+.pts-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.pts-card{background:#1a1f2a;border-radius:8px;padding:8px 10px;text-align:center}
+.pts-card .name{font-size:0.7rem;color:#6b7080;margin-bottom:2px}
+.pts-card .val{font-size:1.1rem;font-weight:600}
+.pts-card.highlight{background:rgba(29,158,117,0.15);border:1px solid rgba(29,158,117,0.3)}
+.pts-card.highlight .val{color:#1D9E75}
+</style>
+</head>
+<body>
+
+<h1>Cenários de classificação — Leonardo Macedo</h1>
+<p class="subtitle">Campeonato em 2 etapas, 2 classificados. Leonardo precisa da 2ª vaga (Victor ocupa a 1ª). O rival decisivo é Matheus (104 pts).</p>
+
+<div class="pts-grid" style="max-width:750px;width:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1.5rem">
+  <div class="pts-card"><div class="name">Victor</div><div class="val">250</div></div>
+  <div class="pts-card"><div class="name">Matheus</div><div class="val">104</div></div>
+  <div class="pts-card"><div class="name">Bernardo</div><div class="val">86</div></div>
+  <div class="pts-card"><div class="name">Luiz Felipe</div><div class="val">78</div></div>
+  <div class="pts-card highlight"><div class="name">Leonardo</div><div class="val">72</div></div>
+</div>
+
+<div class="charts">
+  <div class="chart-block">
+    <p class="chart-label">1. Heatmap — zona de classificação</p>
+    <p class="chart-desc">Verde = Leonardo classifica. Vermelho = não classifica. Passe o mouse para ver detalhes.</p>
+    <div style="position:relative">
+      <canvas id="heatmap" width="700" height="520"></canvas>
+      <div class="tooltip" id="tip1"></div>
+    </div>
+    <div class="legend">
+      <span><span class="lbox" style="background:#1D9E75"></span>Classifica</span>
+      <span><span class="lbox" style="background:#E24B4A"></span>Não classifica</span>
+      <span><span class="lbox" style="background:transparent;border:1px dashed #6b7080"></span>Linha de corte</span>
+    </div>
+  </div>
+
+  <div class="chart-block">
+    <p class="chart-label">2. Curva de corte — posição máxima de Leonardo</p>
+    <p class="chart-desc">Para cada posição do Matheus na 2ª etapa, qual a pior colocação geral que Leonardo pode ter e ainda classificar.</p>
+    <div style="position:relative">
+      <canvas id="curve" width="700" height="420"></canvas>
+      <div class="tooltip" id="tip2"></div>
+    </div>
+    <div class="legend">
+      <span><span class="lbox" style="background:rgba(29,158,117,0.2)"></span>Zona de classificação (abaixo da curva)</span>
+    </div>
+  </div>
+</div>
+
+<p class="footer">Pontuação: tabela de 1º (800 pts) a 99º (1 pt) + all finishers (1 pt)</p>
+
+<script>
+const PT=[800,700,600,550,500,450,400,350,300,250,200,190,180,170,160,150,140,130,120,110,108,106,104,102,100,98,96,94,92,90,88,86,84,82,80,78,76,74,72,70,68,66,64,62,60,58,56,54,52,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33,32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1];
+function p(place){return PT[Math.min(Math.max(place,1),99)-1]}
+const E1_LEO=72,E1_MAT=104;
+const GREEN='#1D9E75',RED='#E24B4A';
+const GRID='rgba(255,255,255,0.06)';
+const TEXT_COL='rgba(255,255,255,0.4)';
+const TEXT_MAIN='#c8cad0';
+const DASH_COL='rgba(255,255,255,0.35)';
+const BG='#151920';
+
+const cutoff=[];
+for(let m=1;m<=99;m++){
+  const mt=E1_MAT+p(m);
+  let maxL=-1;
+  for(let l=1;l<=99;l++){if(E1_LEO+p(l)>mt)maxL=l}
+  cutoff.push(maxL);
+}
+
+// ====== HEATMAP ======
+(function(){
+const cv=document.getElementById('heatmap');
+const ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const margin={top:20,right:20,bottom:55,left:65};
+const pw=W-margin.left-margin.right,ph=H-margin.top-margin.bottom;
+const cellW=pw/99,cellH=ph/99;
+
+ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+
+for(let lx=0;lx<99;lx++){
+  const leo=lx+1,leoTotal=E1_LEO+p(leo);
+  for(let my=0;my<99;my++){
+    const mat=my+1,matTotal=E1_MAT+p(mat);
+    const ok=leoTotal>matTotal;
+    ctx.fillStyle=ok?GREEN:RED;
+    ctx.globalAlpha=ok?0.55:0.22;
+    ctx.fillRect(margin.left+lx*cellW,margin.top+my*cellH,Math.ceil(cellW),Math.ceil(cellH));
+  }
+}
+ctx.globalAlpha=1;
+
+ctx.beginPath();ctx.setLineDash([5,3]);ctx.strokeStyle=DASH_COL;ctx.lineWidth=1.5;
+let started=false;
+for(let m=0;m<99;m++){
+  const maxL=cutoff[m];
+  if(maxL>0){
+    const x=margin.left+(maxL-0.5)*cellW,y=margin.top+(m+0.5)*cellH;
+    if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y);
+  }
+}
+ctx.stroke();ctx.setLineDash([]);
+
+ctx.fillStyle=TEXT_COL;ctx.font='11px DM Sans,sans-serif';
+ctx.textAlign='center';ctx.textBaseline='top';
+[1,10,20,30,40,50,60,70,80,90,99].forEach(t=>{ctx.fillText(t+'º',margin.left+(t-0.5)*cellW,margin.top+ph+8)});
+ctx.textAlign='right';ctx.textBaseline='middle';
+[1,10,20,30,40,50,60,70,80,90,99].forEach(t=>{ctx.fillText(t+'º',margin.left-10,margin.top+(t-0.5)*cellH)});
+
+ctx.fillStyle=TEXT_MAIN;ctx.font='500 13px DM Sans,sans-serif';
+ctx.textAlign='center';ctx.textBaseline='top';
+ctx.fillText('Posição geral do Leonardo — 2ª etapa',margin.left+pw/2,H-16);
+ctx.save();ctx.translate(14,margin.top+ph/2);ctx.rotate(-Math.PI/2);
+ctx.textBaseline='middle';ctx.fillText('Posição geral do Matheus — 2ª etapa',0,0);ctx.restore();
+
+const tip=document.getElementById('tip1');
+cv.addEventListener('mousemove',e=>{
+  const rect=cv.getBoundingClientRect();
+  const sx=e.clientX-rect.left,sy=e.clientY-rect.top;
+  const scX=W/rect.width,scY=H/rect.height;
+  const cx=(sx*scX-margin.left)/cellW,cy=(sy*scY-margin.top)/cellH;
+  if(cx>=0&&cx<99&&cy>=0&&cy<99){
+    const leo=Math.floor(cx)+1,mat=Math.floor(cy)+1;
+    const lt=E1_LEO+p(leo),mt=E1_MAT+p(mat),ok=lt>mt;
+    tip.style.display='block';tip.style.left=(sx+14)+'px';tip.style.top=(sy-12)+'px';
+    tip.innerHTML=`Leo ${leo}º (${lt} pts) vs Mat ${mat}º (${mt} pts) → <strong style="color:${ok?GREEN:RED}">${ok?'Classifica':'Não classifica'}</strong>`;
+  }else tip.style.display='none';
+});
+cv.addEventListener('mouseleave',()=>{tip.style.display='none'});
+})();
+
+// ====== CURVE ======
+(function(){
+const cv=document.getElementById('curve');
+const ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const margin={top:20,right:30,bottom:55,left:65};
+const pw=W-margin.left-margin.right,ph=H-margin.top-margin.bottom;
+
+ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+
+function xP(v){return margin.left+(v-1)/98*pw}
+function yP(v){return margin.top+(v-1)/98*ph}
+
+ctx.strokeStyle=GRID;ctx.lineWidth=0.5;
+[1,10,20,30,40,50,60,70,80,90,99].forEach(t=>{
+  ctx.beginPath();ctx.moveTo(xP(t),margin.top);ctx.lineTo(xP(t),margin.top+ph);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(margin.left,yP(t));ctx.lineTo(margin.left+pw,yP(t));ctx.stroke();
+});
+
+// fill area
+ctx.beginPath();
+let fv=-1;
+for(let m=1;m<=99;m++){
+  if(cutoff[m-1]>0){
+    if(fv<0){fv=m;ctx.moveTo(xP(m),yP(cutoff[m-1]))}
+    else ctx.lineTo(xP(m),yP(cutoff[m-1]));
+  }
+}
+if(fv>0){ctx.lineTo(xP(99),yP(1));ctx.lineTo(xP(fv),yP(1));ctx.closePath();ctx.fillStyle='rgba(29,158,117,0.12)';ctx.fill()}
+
+ctx.beginPath();let st=false;
+for(let m=1;m<=99;m++){
+  if(cutoff[m-1]>0){const x=xP(m),y=yP(cutoff[m-1]);if(!st){ctx.moveTo(x,y);st=true}else ctx.lineTo(x,y)}
+}
+ctx.strokeStyle=GREEN;ctx.lineWidth=2;ctx.stroke();
+
+// reference dots
+ctx.font='11px DM Sans,sans-serif';
+[[5,cutoff[4]],[15,cutoff[14]],[30,cutoff[29]],[50,cutoff[49]],[70,cutoff[69]],[90,cutoff[89]]].forEach(([m,l])=>{
+  if(l>0){
+    const x=xP(m),y=yP(l);
+    ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fillStyle=GREEN;ctx.fill();
+    ctx.fillStyle=TEXT_MAIN;ctx.textAlign='left';ctx.textBaseline='bottom';
+    ctx.fillText('≤'+l+'º',x+7,y-5);
+  }
+});
+
+// zone labels
+ctx.font='500 14px DM Sans,sans-serif';ctx.globalAlpha=0.45;ctx.textAlign='center';
+ctx.fillStyle=GREEN;ctx.fillText('Classifica',xP(70),yP(15));
+ctx.fillStyle=RED;ctx.fillText('Não classifica',xP(20),yP(70));
+ctx.globalAlpha=1;
+
+// axes
+ctx.fillStyle=TEXT_COL;ctx.font='11px DM Sans,sans-serif';
+ctx.textAlign='center';ctx.textBaseline='top';
+[1,10,20,30,40,50,60,70,80,90,99].forEach(t=>{ctx.fillText(t+'º',xP(t),margin.top+ph+8)});
+ctx.textAlign='right';ctx.textBaseline='middle';
+[1,10,20,30,40,50,60,70,80,90,99].forEach(t=>{ctx.fillText(t+'º',margin.left-10,yP(t))});
+
+ctx.fillStyle=TEXT_MAIN;ctx.font='500 13px DM Sans,sans-serif';
+ctx.textAlign='center';ctx.textBaseline='top';
+ctx.fillText('Posição geral do Matheus — 2ª etapa',margin.left+pw/2,H-16);
+ctx.save();ctx.translate(14,margin.top+ph/2);ctx.rotate(-Math.PI/2);
+ctx.textBaseline='middle';ctx.fillText('Posição máxima do Leonardo para classificar',0,0);ctx.restore();
+
+const tip=document.getElementById('tip2');
+cv.addEventListener('mousemove',e=>{
+  const rect=cv.getBoundingClientRect();
+  const sx=e.clientX-rect.left;
+  const mx=(sx*(W/rect.width)-margin.left)/pw*98+1;
+  const m=Math.round(mx);
+  if(m>=1&&m<=99){
+    const c=cutoff[m-1];
+    tip.style.display='block';tip.style.left=(sx+14)+'px';tip.style.top=(e.clientY-rect.top-12)+'px';
+    tip.innerHTML=c>0?`Matheus ${m}º → Leonardo precisa ficar <strong>≤${c}º</strong>`:`Matheus ${m}º → <strong style="color:${RED}">Impossível</strong>`;
+  }else tip.style.display='none';
+});
+cv.addEventListener('mouseleave',()=>{tip.style.display='none'});
+})();
+</script>
+</body>
+</html>
